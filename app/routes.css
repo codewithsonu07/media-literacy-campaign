@@ -1,0 +1,6 @@
+/* Hallmark · shape: Feature Stack (/), Long Document (/learn), Split Studio (/checker), Workbench (/quiz) · genre: editorial · theme: Ink (locked design.md) · redesign: full · styling: Tailwind CSS 4 · axes: light/grotesk-sans/chromatic-teal · posture: restrained · signature: live headline scanner and forensic tools · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H5 E5 S4 R5 V4 · weakest: S, preserve the live scanner and evidence-led tools as the page's material */
+
+@import "tailwindcss";
+@import "./tokens.css";
+@import "./base.css" layer(base);
