@@ -1,17 +1,60 @@
 # Media-Literacy-Campaign
 
+Sift It is a student media-literacy campaign with an interactive SIFT guide, case studies, a headline research tool, and the Campus Claim Radar.
+
+## Campus Claim Radar
+
+Students can anonymously suggest a claim or headline they encountered. Reports are private until a moderator reviews them. Only reviewed learning cards appear at `/radar`; a submission never triggers AI research or becomes public automatically.
+
+The moderator can optionally research a selected report with the existing search/AI flow, review the source links and explanation, edit the student-facing learning card, then publish or reject/delete the report. AI output is an educational aid, not a definitive fact-check.
+
+### Supabase setup
+
+1. Create a Supabase project.
+2. In the SQL Editor, run [`supabase/migrations/20261025000000_campus_claim_radar.sql`](./supabase/migrations/20261025000000_campus_claim_radar.sql).
+3. Create a moderator user in Supabase Authentication. Disable public sign-ups after creating the moderator account(s).
+4. Set the environment variables listed in [`.env.example`](./.env.example). `MODERATOR_EMAILS` is a comma-separated allowlist; API routes verify the signed-in user and allowlisted email server-side.
+5. Keep `SUPABASE_SERVICE_ROLE_KEY`, `TURNSTILE_SECRET_KEY`, and `RATE_LIMIT_SECRET` server-only. Never use a `NEXT_PUBLIC_` prefix for these secrets.
+6. Add the application URL to Supabase Auth's allowed redirect URLs and Cloudflare Turnstile's allowed hostnames.
+
+The public board queries Supabase with the anon key and is protected by row-level security: it can read only `published` rows. Pending submissions and rate-limit records are not available to public or authenticated end users. Moderation routes use the service-role key only after server-side moderator authorization.
+
+No student account or identity is collected with a submission. Do not ask students to include names, private messages, or confidential material. Pending reports remain private until reviewed; moderators should routinely reject or permanently delete reports that are unsuitable or no longer needed. Published learning cards remain available until a moderator deletes them.
+
 ## AI Headline Research
 
-The headline checker keeps its local wording analysis and can also search current web coverage through Tavily. Create a Tavily key in [the Tavily dashboard](https://app.tavily.com/home); its current free plan lists 1,000 search credits per month, with basic search costing one credit per query. The checker runs up to two searches per headline (about 500 full analyses per month at that quota). Add the keys to `.env.local` (the file is git-ignored):
+The headline checker keeps its local wording analysis and can also search current web coverage through Tavily. Tavily retrieves search results; Gemini is tried first to assess those results, and Groq is used if Gemini is unavailable. Both models receive the same bounded search evidence, and neither performs a separate web search in this flow.
 
-```dotenv
-TAVILY_API_KEY=your_tavily_api_key
-GEMINI_API_KEY=your_gemini_api_key
-# GEMINI_MODEL=gemini-3.8-flash
-GROQ_API_KEY=your_groq_api_key
-# GROQ_MODEL=openai/gpt-oss-20b
+Set up provider keys in `.env.local` for local development. The AI API remains available to normal visitors without a daily or monthly application quota. It uses Cloudflare Turnstile and a short-window shared burst limiter to deter automated abuse; this is not a daily usage allowance. Provider pricing, provider-imposed rate limits, and availability still depend on the Tavily/Gemini/Groq plans you select. Configure billing alerts at the providers.
+
+AI analysis sends the headline and search queries to Tavily and sends the headline plus retrieved snippets to the selected model provider. Avoid submitting sensitive or private content. The research output is an educational aid, not a definitive fact-check; it reports evidence strength and only links sources returned by Tavily. “Unverified” does not mean false.
+
+## Environment variables
+
+Copy `.env.example` to `.env.local` and replace the placeholders:
+
+- `TAVILY_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`: server-side AI/search provider keys.
+- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`: public Supabase project configuration.
+- `SUPABASE_SERVICE_ROLE_KEY`: private server-side key for protected submission and moderation operations.
+- `MODERATOR_EMAILS`: comma-separated emails allowed to moderate.
+- `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`: browser challenge key and private verification key.
+- `RATE_LIMIT_SECRET`: long random server-side secret used to hash client addresses before storing short-lived burst counters.
+
+For local development, Turnstile and the shared rate limiter may be absent; production routes fail closed if abuse protection is not configured. To exercise all production protections locally, configure Supabase and Turnstile as well. Deploy behind a trusted proxy that supplies `x-real-ip` (or a trusted `x-forwarded-for`) so the app can apply privacy-preserving shared burst throttles. The database stores an HMAC of the address, not the raw address, and removes inactive counters after 24 hours.
+
+The analysis endpoint accepts at most 500 characters and applies a 30-request-per-minute per-address burst threshold. Anonymous submissions use a 30-per-15-minute per-address burst threshold to reduce spam while accounting for students who share a campus network. Neither is a daily/monthly AI feature quota; limits should be tuned for the deployment's trusted proxy and expected shared campus traffic.
+
+## Development
+
+```bash
+npm install
+npm run dev
 ```
 
-Restart the dev server after changing environment variables. Never expose these keys through a `NEXT_PUBLIC_` variable. Tavily retrieves search results; Gemini is tried first to assess those results, and Groq is used if Gemini is unavailable. Both models receive the same bounded search evidence, and neither performs a separate web search in this flow. Check current [Tavily credits](https://docs.tavily.com/documentation/api-credits), [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing), and [Groq rate limits](https://console.groq.com/docs/rate-limits) before deployment.
+Run checks:
 
-The AI review is an educational research aid, not a definitive fact-check. It reports evidence strength and links only to search results returned by Tavily. Headlines and search queries are sent to Tavily, and the headline plus retrieved snippets are sent to the selected model provider. Review provider terms before using sensitive data or deploying publicly.
+```bash
+npm test
+npm run lint
+npm run build
+```

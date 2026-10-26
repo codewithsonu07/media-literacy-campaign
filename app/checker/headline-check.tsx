@@ -12,6 +12,7 @@ import type { EvidenceSource } from "../lib/claim-evidence";
 import FormattedMarkdown, {
   plainTextPreview,
 } from "../components/formatted-markdown";
+import TurnstileWidget from "../lib/turnstile-widget";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -31,7 +32,13 @@ import {
   LoaderCircle,
 } from "lucide-react";
 
-export default function HeadlineCheck() {
+interface HeadlineCheckProps {
+  turnstileSiteKey: string;
+}
+
+export default function HeadlineCheck({
+  turnstileSiteKey,
+}: HeadlineCheckProps) {
   const [draft, setDraft] = useState("");
   const [report, setReport] = useState<AnalysisReport | null>(null);
   const [activeTab, setActiveTab] = useState<
@@ -47,6 +54,8 @@ export default function HeadlineCheck() {
   );
   const [stageMessage, setStageMessage] = useState("");
   const [liveSources, setLiveSources] = useState<EvidenceSource[]>([]);
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [challengeKey, setChallengeKey] = useState(0);
   const activeRequest = useRef<AbortController | null>(null);
 
   async function handleAnalyze(textToAnalyze?: string) {
@@ -61,6 +70,10 @@ export default function HeadlineCheck() {
     setResearchStage(null);
     setStageMessage("");
     setLiveSources([]);
+    if (turnstileSiteKey && !turnstileToken) {
+      setAiError("Complete the security check before starting AI research.");
+      return;
+    }
     activeRequest.current?.abort();
     const controller = new AbortController();
     activeRequest.current = controller;
@@ -70,7 +83,10 @@ export default function HeadlineCheck() {
       const response = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ headline: target }),
+        body: JSON.stringify({
+          headline: target,
+          turnstileToken,
+        }),
         signal: controller.signal,
       });
       if (!response.ok) {
@@ -121,6 +137,8 @@ export default function HeadlineCheck() {
       if (!controller.signal.aborted) {
         setIsAnalyzing(false);
         activeRequest.current = null;
+        setTurnstileToken("");
+        setChallengeKey((key) => key + 1);
       }
     }
   }
@@ -141,6 +159,8 @@ export default function HeadlineCheck() {
     setResearchStage(null);
     setStageMessage("");
     setLiveSources([]);
+    setTurnstileToken("");
+    setChallengeKey((key) => key + 1);
   }
 
   function handleCopyReport() {
@@ -260,6 +280,16 @@ Verified with SIFT IT Forensic Engine`;
           </span>
         </div>
       </div>
+
+      {turnstileSiteKey && (
+        <TurnstileWidget
+          key={challengeKey}
+          action="analysis"
+          onError={setAiError}
+          onToken={setTurnstileToken}
+          siteKey={turnstileSiteKey}
+        />
+      )}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <button

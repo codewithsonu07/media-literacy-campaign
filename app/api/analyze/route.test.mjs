@@ -48,24 +48,59 @@ function modelText(analysis) {
 
 async function runAnalysis(fetchMock, headline = "A current news headline") {
   const previousFetch = globalThis.fetch;
-  const previousKeys = {
-    tavily: process.env.TAVILY_API_KEY,
-    gemini: process.env.GEMINI_API_KEY,
-    groq: process.env.GROQ_API_KEY,
-  };
+  const envNames = [
+    "TAVILY_API_KEY",
+    "GEMINI_API_KEY",
+    "GROQ_API_KEY",
+    "NEXT_PUBLIC_SUPABASE_URL",
+    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "TURNSTILE_SECRET_KEY",
+    "RATE_LIMIT_SECRET",
+  ];
+  const previousKeys = Object.fromEntries(
+    envNames.map((name) => [name, process.env[name]]),
+  );
   process.env.TAVILY_API_KEY = "test-tavily-key";
   process.env.GEMINI_API_KEY = "test-gemini-key";
   process.env.GROQ_API_KEY = "test-groq-key";
-  globalThis.fetch = fetchMock;
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.TURNSTILE_SECRET_KEY = "test-turnstile-secret";
+  process.env.RATE_LIMIT_SECRET = "test-rate-limit-secret";
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    if (
+      url ===
+      "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+    ) {
+      return jsonResponse({
+        success: true,
+        hostname: "localhost",
+        action: "analysis",
+      });
+    }
+    if (url.endsWith("/rest/v1/rpc/consume_api_rate_limit")) {
+      return jsonResponse({ allowed: true, retry_after_seconds: 60 });
+    }
+    return fetchMock(input, init);
+  };
 
   try {
     const response = await POST(
       new Request("http://localhost/api/analyze", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ headline }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-real-ip": "192.0.2.15",
+        },
+        body: JSON.stringify({
+          headline,
+          turnstileToken: "valid-test-turnstile-token",
+        }),
       }),
     );
+    if (!response.ok) return { response, events: [] };
     const events = (await response.text())
       .trim()
       .split("\n\n")
@@ -74,10 +109,8 @@ async function runAnalysis(fetchMock, headline = "A current news headline") {
   } finally {
     globalThis.fetch = previousFetch;
     for (const [name, value] of Object.entries(previousKeys)) {
-      const key =
-        name === "tavily" ? "TAVILY_API_KEY" : `${name.toUpperCase()}_API_KEY`;
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
     }
   }
 }
@@ -246,6 +279,142 @@ test("rejects headlines over the 500-character limit", async () => {
 
   assert.equal(response.status, 400);
   assert.match((await response.json()).error, /1 and 500 characters/);
+});
+
+test("rejects cross-origin analysis requests before provider calls", async () => {
+  const response = await POST(
+    new Request("http://localhost/api/analyze", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "https://attacker.example",
+      },
+      body: JSON.stringify({ headline: "A current news headline" }),
+    }),
+  );
+
+  assert.equal(response.status, 403);
+});
+
+test("blocks bot traffic rejected by Turnstile", async () => {
+  const previousFetch = globalThis.fetch;
+  const previousKeys = {
+    gemini: process.env.GEMINI_API_KEY,
+    tavily: process.env.TAVILY_API_KEY,
+    turnstile: process.env.TURNSTILE_SECRET_KEY,
+  };
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.TAVILY_API_KEY = "test-tavily-key";
+  process.env.TURNSTILE_SECRET_KEY = "test-turnstile-secret";
+  globalThis.fetch = async (input) => {
+    assert.equal(
+      String(input),
+      "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+    );
+    return jsonResponse({
+      success: false,
+      hostname: "localhost",
+      action: "analysis",
+    });
+  };
+
+  try {
+    const response = await POST(
+      new Request("http://localhost/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          headline: "A current news headline",
+          turnstileToken: "invalid-test-token",
+        }),
+      }),
+    );
+    assert.equal(response.status, 403);
+    assert.match((await response.json()).error, /security check/i);
+  } finally {
+    globalThis.fetch = previousFetch;
+    for (const [name, value] of Object.entries(previousKeys)) {
+      const key =
+        name === "gemini"
+          ? "GEMINI_API_KEY"
+          : name === "tavily"
+            ? "TAVILY_API_KEY"
+            : "TURNSTILE_SECRET_KEY";
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test("applies a short burst throttle without imposing a daily AI quota", async () => {
+  const previousFetch = globalThis.fetch;
+  const previousEnv = {
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    serviceRole: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    rateSecret: process.env.RATE_LIMIT_SECRET,
+    turnstileSecret: process.env.TURNSTILE_SECRET_KEY,
+    tavilyKey: process.env.TAVILY_API_KEY,
+    geminiKey: process.env.GEMINI_API_KEY,
+  };
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.RATE_LIMIT_SECRET = "test-rate-limit-secret";
+  process.env.TURNSTILE_SECRET_KEY = "test-turnstile-secret";
+  process.env.TAVILY_API_KEY = "test-tavily-key";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    if (
+      url ===
+      "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+    ) {
+      return jsonResponse({
+        success: true,
+        hostname: "localhost",
+        action: "analysis",
+      });
+    }
+    if (url.endsWith("/rest/v1/rpc/consume_api_rate_limit")) {
+      return jsonResponse({ allowed: false, retry_after_seconds: 17 });
+    }
+    throw new Error(`Unexpected provider request: ${url}`);
+  };
+
+  try {
+    const response = await POST(
+      new Request("http://localhost/api/analyze", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-real-ip": "192.0.2.16",
+        },
+        body: JSON.stringify({
+          headline: "A current news headline",
+          turnstileToken: "valid-test-turnstile-token",
+        }),
+      }),
+    );
+    assert.equal(response.status, 429);
+    assert.equal(response.headers.get("retry-after"), "17");
+  } finally {
+    globalThis.fetch = previousFetch;
+    for (const [name, value] of Object.entries(previousEnv)) {
+      const key =
+        name === "supabaseUrl"
+          ? "NEXT_PUBLIC_SUPABASE_URL"
+          : name === "serviceRole"
+            ? "SUPABASE_SERVICE_ROLE_KEY"
+            : name === "rateSecret"
+              ? "RATE_LIMIT_SECRET"
+              : name === "turnstileSecret"
+                ? "TURNSTILE_SECRET_KEY"
+                : name === "tavilyKey"
+                  ? "TAVILY_API_KEY"
+                  : "GEMINI_API_KEY";
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
 });
 
 test("returns an SSE error when both providers return malformed analysis", async () => {

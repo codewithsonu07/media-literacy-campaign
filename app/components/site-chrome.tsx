@@ -39,6 +39,12 @@ export function SiteHeader() {
             News cases
           </Link>
           <Link
+            className="inline-flex min-h-11 items-center whitespace-nowrap text-sift-ink-2 underline decoration-transparent underline-offset-4 transition-colors hover:text-sift-accent hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sift-accent motion-reduce:transition-none"
+            href="/radar"
+          >
+            Claim Radar
+          </Link>
+          <Link
             href="/checker"
             className="inline-flex min-h-11 items-center justify-center whitespace-nowrap rounded-sift-input bg-sift-accent px-3 font-semibold text-sift-accent-ink no-underline transition-colors hover:bg-sift-accent-soft-ink hover:text-sift-paper-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sift-accent motion-reduce:transition-none sm:px-4"
           >
@@ -86,6 +92,9 @@ export function SiteFooter() {
             </Link>
             <Link className="inline-flex min-h-11 items-center text-sift-paper-2 underline decoration-transparent underline-offset-4 hover:text-sift-lime hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sift-lime" href="/quiz">
               Forensic Quiz
+            </Link>
+            <Link className="inline-flex min-h-11 items-center text-sift-paper-2 underline decoration-transparent underline-offset-4 hover:text-sift-lime hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sift-lime" href="/radar">
+              Campus Claim Radar
             </Link>
           </nav>
         </div>

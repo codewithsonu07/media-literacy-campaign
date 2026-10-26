@@ -32,7 +32,9 @@ export default function CheckerPage() {
         className="mb-sift-xl rounded-sift-card border border-sift-rule bg-sift-paper-2/85 p-sift-sm shadow-[var(--shadow-card)] backdrop-blur-md sm:mb-sift-2xl sm:p-sift-md lg:p-sift-lg"
         aria-label="Headline intelligence analyzer"
       >
-        <HeadlineCheck />
+        <HeadlineCheck
+          turnstileSiteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? ""}
+        />
       </section>
 
       <section
