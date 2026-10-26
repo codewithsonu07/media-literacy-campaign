@@ -23,9 +23,9 @@ No student account or identity is collected with a submission. Do not ask studen
 
 ## AI Headline Research
 
-The headline checker keeps its local wording analysis and can also search current web coverage through Tavily. Tavily retrieves search results; Gemini is tried first to assess those results, and Groq is used if Gemini is unavailable. Both models receive the same bounded search evidence, and neither performs a separate web search in this flow.
+The headline checker keeps its local wording analysis and can also search current web coverage through Tavily. Tavily retrieves search results; Gemini is tried first to assess those results, followed by Groq and then OpenAI if earlier providers are unavailable. Any configured model provider can run on its own. Models receive the same bounded search evidence, and none performs a separate web search in this flow.
 
-Set up provider keys in `.env.local` for local development. The AI API remains available to normal visitors without a daily or monthly application quota. It uses Cloudflare Turnstile and a short-window shared burst limiter to deter automated abuse; this is not a daily usage allowance. Provider pricing, provider-imposed rate limits, and availability still depend on the Tavily/Gemini/Groq plans you select. Configure billing alerts at the providers.
+Set up provider keys in `.env.local` for local development. Add `OPENAI_API_KEY` to enable OpenAI (using `gpt-4o-mini` by default); optionally set `OPENAI_MODEL` to use another compatible model. Keep the key server-side and do not prefix it with `NEXT_PUBLIC_`. The AI API remains available to normal visitors without a daily or monthly application quota. It uses Cloudflare Turnstile and a short-window shared burst limiter to deter automated abuse; this is not a daily usage allowance. Provider pricing, provider-imposed rate limits, and availability still depend on the Tavily/Gemini/Groq/OpenAI plans you select. Configure billing alerts at the providers.
 
 AI analysis sends the headline and search queries to Tavily and sends the headline plus retrieved snippets to the selected model provider. Avoid submitting sensitive or private content. The research output is an educational aid, not a definitive fact-check; it reports evidence strength and only links sources returned by Tavily. “Unverified” does not mean false.
 
@@ -33,7 +33,8 @@ AI analysis sends the headline and search queries to Tavily and sends the headli
 
 Copy `.env.example` to `.env.local` and replace the placeholders:
 
-- `TAVILY_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`: server-side AI/search provider keys.
+- `TAVILY_API_KEY`: server-side search provider key.
+- `GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENAI_API_KEY`: server-side AI provider keys; at least one model key is required. Optional model overrides are `GEMINI_MODEL`, `GROQ_MODEL`, and `OPENAI_MODEL`.
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`: public Supabase project configuration.
 - `SUPABASE_SERVICE_ROLE_KEY`: private server-side key for protected submission and moderation operations.
 - `MODERATOR_EMAILS`: comma-separated emails allowed to moderate.

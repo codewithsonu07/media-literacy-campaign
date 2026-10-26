@@ -46,12 +46,17 @@ function modelText(analysis) {
   };
 }
 
-async function runAnalysis(fetchMock, headline = "A current news headline") {
+async function runAnalysis(
+  fetchMock,
+  headline = "A current news headline",
+  configuredProviders = { gemini: true, groq: false, openai: false },
+) {
   const previousFetch = globalThis.fetch;
   const envNames = [
     "TAVILY_API_KEY",
     "GEMINI_API_KEY",
     "GROQ_API_KEY",
+    "OPENAI_API_KEY",
     "NEXT_PUBLIC_SUPABASE_URL",
     "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
     "SUPABASE_SERVICE_ROLE_KEY",
@@ -62,8 +67,12 @@ async function runAnalysis(fetchMock, headline = "A current news headline") {
     envNames.map((name) => [name, process.env[name]]),
   );
   process.env.TAVILY_API_KEY = "test-tavily-key";
-  process.env.GEMINI_API_KEY = "test-gemini-key";
-  process.env.GROQ_API_KEY = "test-groq-key";
+  if (configuredProviders.gemini) process.env.GEMINI_API_KEY = "test-gemini-key";
+  else delete process.env.GEMINI_API_KEY;
+  if (configuredProviders.groq) process.env.GROQ_API_KEY = "test-groq-key";
+  else delete process.env.GROQ_API_KEY;
+  if (configuredProviders.openai) process.env.OPENAI_API_KEY = "test-openai-key";
+  else delete process.env.OPENAI_API_KEY;
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
   process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
   process.env.TURNSTILE_SECRET_KEY = "test-turnstile-secret";
@@ -147,6 +156,68 @@ test("streams real research stages and cites only retrieved sources", async () =
   assert.equal(result.sources.length, 2);
 });
 
+test("uses OpenAI when it is the only configured model provider", async () => {
+  let openaiBody;
+  const { events } = await runAnalysis(
+    async (input, init) => {
+      const url = String(input);
+      if (url === "https://api.tavily.com/search") {
+        return jsonResponse({ results: sources });
+      }
+      if (url === "https://api.openai.com/v1/chat/completions") {
+        openaiBody = JSON.parse(init.body);
+        return jsonResponse({
+          choices: [
+            { message: { content: JSON.stringify(corroboratingAnalysis) } },
+          ],
+        });
+      }
+      throw new Error(`Unexpected provider request: ${url}`);
+    },
+    "A current news headline",
+    { gemini: false, groq: false, openai: true },
+  );
+
+  assert.equal(openaiBody.model, "gpt-4o-mini");
+  assert.deepEqual(openaiBody.response_format, { type: "json_object" });
+  assert.match(openaiBody.messages[1].content, /reuters\.com/);
+  const result = events.find((event) => event.type === "result").analysis;
+  assert.equal(result.provider, "OpenAI");
+  assert.equal(result.verdict, "Likely true");
+});
+
+test("tries model providers in OpenAI, Groq, Gemini order", async () => {
+  const providerAttempts = [];
+  const { events } = await runAnalysis(async (input) => {
+    const url = String(input);
+    if (url === "https://api.tavily.com/search") {
+      return jsonResponse({ results: sources });
+    }
+    if (url === "https://api.openai.com/v1/chat/completions") {
+      providerAttempts.push("OpenAI");
+      return jsonResponse({ error: { message: "OpenAI unavailable" } }, 503);
+    }
+    if (url === "https://api.groq.com/openai/v1/chat/completions") {
+      providerAttempts.push("Groq");
+      return jsonResponse({ error: { message: "Groq unavailable" } }, 503);
+    }
+    if (url.includes("generativelanguage.googleapis.com")) {
+      providerAttempts.push("Gemini");
+      return jsonResponse({
+        candidates: [
+          { content: { parts: [{ text: JSON.stringify(corroboratingAnalysis) }] } },
+        ],
+      });
+    }
+    throw new Error(`Unexpected provider request: ${url}`);
+  }, "A current news headline", { gemini: true, groq: true, openai: true });
+
+  assert.deepEqual(providerAttempts, ["OpenAI", "Groq", "Gemini"]);
+  const result = events.find((event) => event.type === "result").analysis;
+  assert.equal(result.provider, "Gemini");
+  assert.equal(result.verdict, "Likely true");
+});
+
 test("falls back to Groq with the same retrieved evidence", async () => {
   let groqBody;
   const { events } = await runAnalysis(async (input, init) => {
@@ -169,7 +240,7 @@ test("falls back to Groq with the same retrieved evidence", async () => {
       });
     }
     throw new Error(`Unexpected provider request: ${url}`);
-  });
+  }, "A current news headline", { gemini: true, groq: true, openai: false });
 
   assert.match(JSON.stringify(groqBody), /reuters\.com/);
   assert.match(
@@ -417,20 +488,23 @@ test("applies a short burst throttle without imposing a daily AI quota", async (
   }
 });
 
-test("returns an SSE error when both providers return malformed analysis", async () => {
+test("returns an SSE error when all configured providers return malformed analysis", async () => {
   const { events } = await runAnalysis(async (input) => {
     const url = String(input);
     if (url === "https://api.tavily.com/search") {
       return jsonResponse({ results: sources });
     }
+    if (
+      url === "https://api.openai.com/v1/chat/completions" ||
+      url === "https://api.groq.com/openai/v1/chat/completions"
+    ) {
+      return jsonResponse({ choices: [{ message: { content: "not json" } }] });
+    }
     if (url.includes("generativelanguage.googleapis.com")) {
       return jsonResponse(modelText({}));
     }
-    if (url === "https://api.groq.com/openai/v1/chat/completions") {
-      return jsonResponse({ choices: [{ message: { content: "not json" } }] });
-    }
     throw new Error(`Unexpected provider request: ${url}`);
-  });
+  }, "A current news headline", { gemini: true, groq: true, openai: true });
 
   assert.equal(
     events.some((event) => event.type === "result"),

@@ -293,6 +293,47 @@ async function synthesizeWithGroq(
   return parseModelAnalysis(message.content);
 }
 
+async function synthesizeWithOpenAI(
+  apiKey: string,
+  headline: string,
+  sources: EvidenceSource[],
+  signal: AbortSignal,
+): Promise<ModelAnalysis> {
+  const response = await fetch(
+    "https://api.openai.com/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+        messages: [
+          { role: "system", content: SYSTEM_INSTRUCTIONS },
+          {
+            role: "user",
+            content: JSON.stringify({ headline, sources }),
+          },
+        ],
+        response_format: { type: "json_object" },
+        max_tokens: 1600,
+      }),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(35_000)]),
+    },
+  );
+  const payload: unknown = await response.json().catch(() => null);
+  if (!response.ok) throw getProviderError(response, payload);
+  if (!isRecord(payload)) throw new Error("OpenAI returned an invalid response.");
+  const choice = Array.isArray(payload.choices) ? payload.choices[0] : null;
+  const message =
+    isRecord(choice) && isRecord(choice.message) ? choice.message : null;
+  if (typeof message?.content !== "string" || !message.content) {
+    throw new Error("OpenAI returned an empty analysis.");
+  }
+  return parseModelAnalysis(message.content);
+}
+
 export async function POST(request: Request) {
   const originError = checkSameOrigin(request);
   if (originError) return originError;
@@ -319,6 +360,7 @@ export async function POST(request: Request) {
   const tavilyApiKey = process.env.TAVILY_API_KEY;
   const geminiApiKey = process.env.GEMINI_API_KEY;
   const groqApiKey = process.env.GROQ_API_KEY;
+  const openaiApiKey = process.env.OPENAI_API_KEY;
   if (!tavilyApiKey) {
     return Response.json(
       {
@@ -328,11 +370,11 @@ export async function POST(request: Request) {
       { status: 503 },
     );
   }
-  if (!geminiApiKey && !groqApiKey) {
+  if (!geminiApiKey && !groqApiKey && !openaiApiKey) {
     return Response.json(
       {
         error:
-          "AI analysis is not configured. Add GEMINI_API_KEY or GROQ_API_KEY to the server environment.",
+          "AI analysis is not configured. Add GEMINI_API_KEY, GROQ_API_KEY, or OPENAI_API_KEY to the server environment.",
       },
       { status: 503 },
     );
@@ -402,43 +444,66 @@ export async function POST(request: Request) {
             message: "Comparing source coverage against the claim.",
           });
 
-          let provider: AIAnalysis["provider"];
-          let modelAnalysis: ModelAnalysis;
+          const providers: {
+            name: AIAnalysis["provider"];
+            apiKey: string;
+            synthesize: (
+              apiKey: string,
+              headline: string,
+              sources: EvidenceSource[],
+              signal: AbortSignal,
+            ) => Promise<ModelAnalysis>;
+          }[] = [];
+          if (openaiApiKey) {
+            providers.push({
+              name: "OpenAI",
+              apiKey: openaiApiKey,
+              synthesize: synthesizeWithOpenAI,
+            });
+          }
+          if (groqApiKey) {
+            providers.push({
+              name: "Groq",
+              apiKey: groqApiKey,
+              synthesize: synthesizeWithGroq,
+            });
+          }
           if (geminiApiKey) {
+            providers.push({
+              name: "Gemini",
+              apiKey: geminiApiKey,
+              synthesize: synthesizeWithGemini,
+            });
+          }
+
+          let provider: AIAnalysis["provider"] | undefined;
+          let modelAnalysis: ModelAnalysis | undefined;
+          let lastProviderError: unknown;
+          for (const candidate of providers) {
+            if (provider) break;
             try {
-              modelAnalysis = await synthesizeWithGemini(
-                geminiApiKey,
+              modelAnalysis = await candidate.synthesize(
+                candidate.apiKey,
                 headline.trim(),
                 sources,
                 analysisController.signal,
               );
-              provider = "Gemini";
+              provider = candidate.name;
             } catch (error) {
-              if (!groqApiKey) throw error;
+              lastProviderError = error;
+              const nextProvider = providers[providers.indexOf(candidate) + 1];
+              if (!nextProvider) throw error;
               send({
                 type: "progress",
                 stage: "comparing",
-                message:
-                  "Gemini is unavailable; switching to Groq for the same source-based review.",
+                message: `${candidate.name} is unavailable; switching to ${nextProvider.name} for the same source-based review.`,
               });
-              modelAnalysis = await synthesizeWithGroq(
-                groqApiKey,
-                headline.trim(),
-                sources,
-                analysisController.signal,
-              );
-              provider = "Groq";
             }
-          } else if (groqApiKey) {
-            modelAnalysis = await synthesizeWithGroq(
-              groqApiKey,
-              headline.trim(),
-              sources,
-              analysisController.signal,
-            );
-            provider = "Groq";
-          } else {
-            throw new Error("No AI provider is configured.");
+          }
+          if (!provider || !modelAnalysis) {
+            throw lastProviderError instanceof Error
+              ? lastProviderError
+              : new Error("No AI provider is configured.");
           }
 
           send({

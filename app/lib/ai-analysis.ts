@@ -12,7 +12,7 @@ export type AIVerdict =
   | "Unverified";
 
 export interface AIAnalysis {
-  provider: "Gemini" | "Groq";
+  provider: "Gemini" | "Groq" | "OpenAI";
   claim: string;
   verdict: AIVerdict;
   evidenceStrength: EvidenceStrength;
