@@ -142,7 +142,14 @@ test("streams real research stages and cites only retrieved sources", async () =
     events
       .filter((event) => event.type === "progress")
       .map((event) => event.stage),
-    ["searching", "reviewing", "comparing", "preparing", "complete"],
+    [
+      "searching",
+      "reviewing",
+      "comparing",
+      "comparing",
+      "preparing",
+      "complete",
+    ],
   );
   assert.equal(
     events.find((event) => event.type === "sources").sources.length,
@@ -218,16 +225,16 @@ test("tries model providers in OpenAI, Groq, Gemini order", async () => {
   assert.equal(result.verdict, "Likely true");
 });
 
-test("falls back to Groq with the same retrieved evidence", async () => {
+test("falls back from OpenAI to Groq with the same retrieved evidence", async () => {
   let groqBody;
   const { events } = await runAnalysis(async (input, init) => {
     const url = String(input);
     if (url === "https://api.tavily.com/search") {
       return jsonResponse({ results: sources });
     }
-    if (url.includes("generativelanguage.googleapis.com")) {
+    if (url === "https://api.openai.com/v1/chat/completions") {
       return jsonResponse(
-        { error: { message: "Temporary Gemini outage" } },
+        { error: { message: "Temporary OpenAI outage" } },
         503,
       );
     }
@@ -240,7 +247,7 @@ test("falls back to Groq with the same retrieved evidence", async () => {
       });
     }
     throw new Error(`Unexpected provider request: ${url}`);
-  }, "A current news headline", { gemini: true, groq: true, openai: false });
+  }, "A current news headline", { gemini: true, groq: true, openai: true });
 
   assert.match(JSON.stringify(groqBody), /reuters\.com/);
   assert.match(
@@ -252,6 +259,23 @@ test("falls back to Groq with the same retrieved evidence", async () => {
   assert.equal(result.provider, "Groq");
   assert.equal(result.verdict, "Likely true");
   assert.equal(result.sources.length, 2);
+  assert.ok(
+    events.some(
+      (event) =>
+        event.type === "progress" &&
+        event.message.includes(
+          "Configured AI providers in order: OpenAI, Groq, Gemini",
+        ),
+    ),
+  );
+  assert.ok(
+    events.some(
+      (event) =>
+        event.type === "progress" &&
+        event.message.includes("OpenAI failed: Provider returned 503") &&
+        event.message.includes("Switching to Groq"),
+    ),
+  );
 });
 
 test("keeps claims unverified when every search request fails", async () => {
