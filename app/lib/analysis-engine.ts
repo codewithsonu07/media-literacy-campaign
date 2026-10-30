@@ -219,7 +219,7 @@ export function analyzeHeadline(headline: string): AnalysisReport {
   // 4. Attribution Quality
   const foundSources: string[] = [];
   let attributionStatus: AnalysisReport["attribution"]["status"] = "No Attribution (Direct Assertion)";
-  let attributionDetail = "No source is explicitly identified in the headline. This does not indicate whether the claim is true or the publisher is trustworthy.";
+  let attributionDetail = "No explicit source attribution was detected. A named organization does not by itself show who verified the claim.";
 
   if (/(anonymous sources|unnamed sources|sources say|insiders claim|experts reveal|allegedly|rumors)/i.test(lower)) {
     attributionStatus = "Vague / Weasel Words";

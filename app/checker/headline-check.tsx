@@ -21,7 +21,6 @@ import {
   Info,
   Layers,
   Search,
-  ShieldAlert,
   Sliders,
   Sparkles,
   Copy,
@@ -167,12 +166,12 @@ export default function HeadlineCheck({
     if (!report) return;
     const textToCopy = `[SIFT IT Forensic Intelligence Dossier]
 Headline: "${report.rawHeadline}"
-Manipulation Wording Signal: ${report.manipulationRisk.overallScore}/100 (${report.manipulationRisk.tier})
+Flagged Wording Terms: ${report.flags.length}
 Primary Manipulation Tactic: ${report.manipulationRisk.primaryTactic}
 Emotional Temperature: ${report.manipulationRisk.emotionalTemperature}
-Sensationalism Wording Signal: ${report.sensationalismScore}/100 (${report.sensationalismLevel})
+Formatting Alerts: ${report.punctuationFlags.length}
 Source Attribution: ${report.attribution.status}
-Note: Local wording signals do not determine factual accuracy.
+Note: Rule-based wording checks do not determine factual accuracy.
 Objective Reframe: "${report.neutralReframe}"
 Linguistic Flags Detected: ${report.flags.map((f) => `"${f.term}" (${f.category})`).join(", ") || "None"}
 Verified with SIFT IT Forensic Engine`;
@@ -275,7 +274,7 @@ Verified with SIFT IT Forensic Engine`;
             Scans for psychological hooks, manipulation vectors, and sourcing
             quality.
           </span>
-          <span className="shrink-0 font-mono tabular-nums">
+          <span className="shrink-0 tabular-nums">
             {draft.length} / 500 chars
           </span>
         </div>
@@ -386,99 +385,6 @@ Verified with SIFT IT Forensic Engine`;
             )}
 
             {aiAnalysis && <AIReviewPanel analysis={aiAnalysis} />}
-
-            {/* Score Grid Cards: 3 High-Impact Cards */}
-            <p className="text-xs leading-5 text-sift-muted">
-              Heuristic wording signals, not calibrated probabilities or
-              evidence verdicts. Check the evidence conclusion below to assess
-              whether the claim is supported.
-            </p>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {/* Card 1: Manipulation Risk Index */}
-              <div className="rounded-2xl border border-sift-rule bg-sift-paper-2 p-4 sm:p-5">
-                  <div className="flex items-center justify-between gap-3 text-sm font-semibold text-sift-muted">
-                    <span>Wording pressure estimate</span>
-                  <Zap size={16} className="shrink-0 text-sift-accent" />
-                </div>
-                <div className="mt-3 flex items-baseline gap-2">
-                  <strong className="font-sift-display text-4xl font-semibold tabular-nums text-sift-ink">
-                    {report.manipulationRisk.overallScore}
-                  </strong>
-                  <small className="text-sm text-sift-muted">/ 100</small>
-                </div>
-                <div className="mt-2 inline-flex rounded-full bg-sift-paper-3 px-2.5 py-1 text-xs font-semibold text-sift-ink-2">
-                  {report.manipulationRisk.tier}
-                </div>
-                <ScoreMeter score={report.manipulationRisk.overallScore} label="Manipulation risk score" />
-                <p className="mt-3 text-xs leading-5 text-sift-muted">
-                  Combines emotional, urgency, attribution, and language cues.
-                </p>
-              </div>
-
-              {/* Card 2: Sensationalism Meter */}
-              <div className="rounded-2xl border border-sift-rule bg-sift-paper-2 p-4 sm:p-5">
-                <div className="flex items-center justify-between gap-3 text-sm font-semibold text-sift-muted">
-                  <span>Sensational wording estimate</span>
-                  <Flame size={16} className="shrink-0 text-sift-coral" />
-                </div>
-                <div className="mt-3 flex items-baseline gap-2">
-                  <strong className="font-sift-display text-4xl font-semibold tabular-nums text-sift-ink">
-                    {report.sensationalismScore}
-                  </strong>
-                  <small className="text-sm text-sift-muted">/ 100</small>
-                </div>
-                <div className="mt-2 inline-flex rounded-full bg-sift-paper-3 px-2.5 py-1 text-xs font-semibold text-sift-ink-2">
-                  {report.sensationalismLevel}
-                </div>
-                <ScoreMeter score={report.sensationalismScore} label="Sensationalism score" />
-                <p className="mt-3 text-xs leading-5 text-sift-muted">
-                  Based on flagged wording, capitalization, and punctuation.
-                </p>
-              </div>
-
-              {/* Card 3: Headline Attribution */}
-              <div className="rounded-2xl border border-sift-rule bg-sift-paper-2 p-4 sm:p-5">
-                <div className="flex items-center justify-between gap-3 text-sm font-semibold text-sift-muted">
-                  <span>Source attribution</span>
-                  <ShieldAlert size={16} className="shrink-0 text-sift-accent" />
-                </div>
-                <div className="mt-4 min-h-11 text-lg font-semibold leading-6 text-sift-ink">
-                  {report.attribution.identifiedSources.length > 0
-                    ? report.attribution.identifiedSources.join(", ")
-                    : report.attribution.status === "Vague / Weasel Words"
-                      ? "Vague source"
-                      : report.attribution.status === "Anonymous Sources"
-                        ? "Anonymous source"
-                        : "No source named"}
-                </div>
-                <p className="mt-3 text-xs leading-5 text-sift-muted">
-                  {report.attribution.detail}
-                </p>
-              </div>
-            </div>
-
-            {/* Interactive Headline Highlighter */}
-            <div className="rounded-2xl border border-sift-rule bg-sift-paper p-4 sm:p-5">
-              <h4 className="text-sm font-semibold text-sift-muted">
-                Headline anatomy inspection
-              </h4>
-              <p className="mt-3 break-words text-lg font-medium leading-8 text-sift-ink sm:text-xl sm:leading-9">
-                {renderAnnotatedHeadline(
-                  report.rawHeadline,
-                  report.flags,
-                  selectedFlag,
-                  setSelectedFlag,
-                )}
-              </p>
-              <div className="mt-4 flex items-start gap-2 border-t border-sift-rule pt-3 text-xs leading-5 text-sift-muted">
-                <Info size={13} className="mt-0.5 shrink-0 text-sift-accent" />
-                <span>
-                  {report.flags.length > 0
-                    ? `Click any highlighted word above to inspect its manipulation mechanism (${report.flags.length} linguistic flags detected).`
-                    : "No high-risk emotional or clickbait words detected in the headline phrasing."}
-                </span>
-              </div>
-            </div>
 
             {/* Selected Flag Details Inspector */}
             {selectedFlag && (
@@ -1174,50 +1080,3 @@ function AIReviewPanel({ analysis }: { analysis: AIAnalysis }) {
   );
 }
 
-// Helper to highlight flagged terms in headline
-function renderAnnotatedHeadline(
-  headline: string,
-  flags: LinguisticFlag[],
-  selectedFlag: LinguisticFlag | null,
-  onSelect: (flag: LinguisticFlag) => void,
-) {
-  if (flags.length === 0) return <span>{headline}</span>;
-
-  const parts = [];
-  let cursor = 0;
-
-  for (const flag of flags) {
-    if (flag.start > cursor) {
-      parts.push(
-        <span key={`text-${cursor}`}>
-          {headline.slice(cursor, flag.start)}
-        </span>,
-      );
-    }
-
-    const isSelected = selectedFlag?.start === flag.start;
-    parts.push(
-      <mark
-        key={`flag-${flag.start}-${flag.end}`}
-        className={`cursor-pointer rounded px-0.5 underline decoration-2 underline-offset-2 focus-visible:outline-3 focus-visible:outline-sift-accent focus-visible:outline-offset-2 ${severityTone(flag.severity)} ${
-          isSelected ? "ring-2 ring-sift-accent" : ""
-        }`}
-        onClick={() => onSelect(flag)}
-        title={`${flag.category}: ${flag.explanation}`}
-      >
-        {headline.slice(flag.start, flag.end)}
-        <span className="ml-1 inline-block rounded bg-sift-paper-2 px-1 py-0.5 align-middle font-mono text-[0.6rem] font-medium text-sift-ink-2">
-          {flag.category.split(" ")[0]}
-        </span>
-      </mark>,
-    );
-
-    cursor = flag.end;
-  }
-
-  if (cursor < headline.length) {
-    parts.push(<span key={`text-end`}>{headline.slice(cursor)}</span>);
-  }
-
-  return <>{parts}</>;
-}
