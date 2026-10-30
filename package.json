@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test app/lib/claim-evidence.test.mjs app/api/analyze/route.test.mjs app/api/submissions/route.test.mjs app/api/radar/route.test.mjs app/api/admin/claims/route.test.mjs"
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test app/lib/claim-evidence.test.mjs app/lib/analysis-engine.test.mjs app/api/analyze/route.test.mjs app/api/submissions/route.test.mjs app/api/radar/route.test.mjs app/api/admin/claims/route.test.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

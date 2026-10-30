@@ -27,7 +27,7 @@ export interface ManipulationVector {
 
 export interface ManipulationRiskReport {
   overallScore: number; // 0-100
-  tier: "Low Manipulation Risk" | "Moderate / Subtle Framing" | "High Manipulation Risk" | "Hostile Psychological Exploitation";
+  tier: "Low wording signals" | "Some wording signals" | "Elevated wording signals" | "Many wording signals";
   primaryTactic: string;
   targetVulnerability: string;
   emotionalTemperature: "Cold / Academic" | "Neutral / Sober" | "Warm / Subjective" | "Heated / Outraged" | "Volatile / Crisis";
@@ -49,7 +49,7 @@ export interface AnalysisReport {
   rawHeadline: string;
   cleanedHeadline: string;
   sensationalismScore: number; // 0-100
-  sensationalismLevel: "Low / Measured" | "Moderate / Slanted" | "High / Clickbait" | "Severe / Rage-Bait";
+  sensationalismLevel: "Low wording signal" | "Moderate wording signal" | "High wording signal" | "Very high wording signal";
   credibilityRisk: "Low Risk" | "Caution Warranted" | "High Verification Needed" | "Extreme Red Flags";
   credibilityScore: number; // 0-100 (higher = more measured/grounded)
   framingType: "Informative / Neutral" | "Sensationalized" | "Speculative / Unverified" | "Emotionally Charged";
@@ -219,21 +219,19 @@ export function analyzeHeadline(headline: string): AnalysisReport {
   // 4. Attribution Quality
   const foundSources: string[] = [];
   let attributionStatus: AnalysisReport["attribution"]["status"] = "No Attribution (Direct Assertion)";
-  let attributionDetail = "The headline makes an absolute claim without identifying who made it or where the data came from.";
+  let attributionDetail = "No source is explicitly identified in the headline. This does not indicate whether the claim is true or the publisher is trustworthy.";
 
-  if (/(reuters|associated press|ap news|pib|who|un|nasa|isro|bbc|the hindu|nature|lancet)/i.test(lower)) {
-    attributionStatus = "Attributed to Specific Entity";
-    attributionDetail = "References a recognized wire service, scientific journal, or institutional research team.";
-    const match = lower.match(/(reuters|associated press|ap news|pib|who|un|nasa|isro|bbc|the hindu|nature|lancet)/i);
-    if (match) foundSources.push(match[0].toUpperCase());
-  } else if (/according to ([a-z0-9\s]+)/i.test(lower)) {
-    attributionStatus = "Attributed to Specific Entity";
-    const src = lower.match(/according to ([a-z0-9\s]+)/i)?.[1]?.trim();
-    attributionDetail = `Explicitly attributes statement to "${src || "specified source"}", allowing reader to verify original quote.`;
-    if (src) foundSources.push(src);
-  } else if (/(sources say|insiders claim|experts reveal|allegedly|rumors)/i.test(lower)) {
+  if (/(anonymous sources|unnamed sources|sources say|insiders claim|experts reveal|allegedly|rumors)/i.test(lower)) {
     attributionStatus = "Vague / Weasel Words";
     attributionDetail = "Uses ambiguous authorities ('sources', 'insiders') that cannot be scrutinized or cross-referenced.";
+  } else {
+    const sourceMatch = text.match(/\baccording to\s+([^,.;:!?]+)/i) ?? text.match(/\b(reuters|associated press|ap news|pib|who|un|nasa|isro|bbc|the hindu|nature|lancet)\s+(?:reports?|says?|confirms?|finds?|announces?)\b/i);
+    const source = sourceMatch?.[1]?.trim();
+    if (source) {
+      attributionStatus = "Attributed to Specific Entity";
+      attributionDetail = `The headline explicitly attributes the claim to "${source}". Verify the original source and its supporting evidence.`;
+      foundSources.push(source);
+    }
   }
 
   // 5. Sensationalism Score (0 to 100)
@@ -241,16 +239,13 @@ export function analyzeHeadline(headline: string): AnalysisReport {
   rawScore += cleanFlags.length * 14;
   if (capsRatio > 0.4) rawScore += 25;
   if (punctuationFlags.length > 0) rawScore += punctuationFlags.length * 15;
-  if (attributionStatus === "Vague / Weasel Words") rawScore += 18;
-  if (attributionStatus === "No Attribution (Direct Assertion)" && cleanFlags.length > 1) rawScore += 10;
-  if (attributionStatus === "Attributed to Specific Entity") rawScore -= 15;
   
   const sensationalismScore = Math.max(5, Math.min(98, Math.round(rawScore)));
 
-  let sensationalismLevel: AnalysisReport["sensationalismLevel"] = "Low / Measured";
-  if (sensationalismScore >= 70) sensationalismLevel = "Severe / Rage-Bait";
-  else if (sensationalismScore >= 45) sensationalismLevel = "High / Clickbait";
-  else if (sensationalismScore >= 25) sensationalismLevel = "Moderate / Slanted";
+  let sensationalismLevel: AnalysisReport["sensationalismLevel"] = "Low wording signal";
+  if (sensationalismScore >= 70) sensationalismLevel = "Very high wording signal";
+  else if (sensationalismScore >= 45) sensationalismLevel = "High wording signal";
+  else if (sensationalismScore >= 25) sensationalismLevel = "Moderate wording signal";
 
   // Credibility Score (Inverse of sensationalism with attribution bonus)
   let credScore = 100 - sensationalismScore;
@@ -271,7 +266,7 @@ export function analyzeHeadline(headline: string): AnalysisReport {
   // 6. DEEP MANIPULATION RISK ANALYSIS
   // Calculate specific manipulation vector scores (0-100)
   const cognitiveScore = Math.min(100, (angerWords.length * 35) + (fearWords.length * 40));
-  const attributionScore = attributionStatus === "Vague / Weasel Words" ? 85 : attributionStatus === "No Attribution (Direct Assertion)" ? 60 : 15;
+  const attributionScore = attributionStatus === "Vague / Weasel Words" ? 85 : 0;
   const linguisticScore = Math.min(100, (cleanFlags.filter(f => f.category === "Absolute Claim" || f.category === "Loaded Verb").length * 30) + (capsRatio > 0.4 ? 30 : 0));
   const contextScore = (text.includes("?") || punctuationFlags.length > 0 || /secret|quietly|refuse/i.test(lower)) ? 75 : 20;
   const viralityScore = Math.min(100, (urgencyWords.length * 40) + (curiosityWords.length * 35) + (punctuationFlags.length * 15));
@@ -291,10 +286,10 @@ export function analyzeHeadline(headline: string): AnalysisReport {
     return "Low";
   }
 
-  let manipTier: ManipulationRiskReport["tier"] = "Low Manipulation Risk";
-  if (overallManipScore >= 75) manipTier = "Hostile Psychological Exploitation";
-  else if (overallManipScore >= 50) manipTier = "High Manipulation Risk";
-  else if (overallManipScore >= 25) manipTier = "Moderate / Subtle Framing";
+  let manipTier: ManipulationRiskReport["tier"] = "Low wording signals";
+  if (overallManipScore >= 75) manipTier = "Many wording signals";
+  else if (overallManipScore >= 50) manipTier = "Elevated wording signals";
+  else if (overallManipScore >= 25) manipTier = "Some wording signals";
 
   let primaryTactic = "Informational / Standard Wire Reporting";
   let targetVulnerability = "General public seeking straightforward factual developments.";

@@ -389,14 +389,15 @@ Verified with SIFT IT Forensic Engine`;
 
             {/* Score Grid Cards: 3 High-Impact Cards */}
             <p className="text-xs leading-5 text-sift-muted">
-              Local rule-based wording signals only. These scores do not show
-              whether a claim is true; use the evidence conclusion below.
+              Heuristic wording signals, not calibrated probabilities or
+              evidence verdicts. Check the evidence conclusion below to assess
+              whether the claim is supported.
             </p>
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {/* Card 1: Manipulation Risk Index */}
               <div className="rounded-2xl border border-sift-rule bg-sift-paper-2 p-4 sm:p-5">
                   <div className="flex items-center justify-between gap-3 text-sm font-semibold text-sift-muted">
-                    <span>Manipulation risk index</span>
+                    <span>Wording pressure estimate</span>
                   <Zap size={16} className="shrink-0 text-sift-accent" />
                 </div>
                 <div className="mt-3 flex items-baseline gap-2">
@@ -410,14 +411,14 @@ Verified with SIFT IT Forensic Engine`;
                 </div>
                 <ScoreMeter score={report.manipulationRisk.overallScore} label="Manipulation risk score" />
                 <p className="mt-3 text-xs leading-5 text-sift-muted">
-                  Estimates pressure from emotional, urgent, and loaded wording.
+                  Combines emotional, urgency, attribution, and language cues.
                 </p>
               </div>
 
               {/* Card 2: Sensationalism Meter */}
               <div className="rounded-2xl border border-sift-rule bg-sift-paper-2 p-4 sm:p-5">
                 <div className="flex items-center justify-between gap-3 text-sm font-semibold text-sift-muted">
-                  <span>Sensationalism index</span>
+                  <span>Sensational wording estimate</span>
                   <Flame size={16} className="shrink-0 text-sift-coral" />
                 </div>
                 <div className="mt-3 flex items-baseline gap-2">
@@ -431,29 +432,27 @@ Verified with SIFT IT Forensic Engine`;
                 </div>
                 <ScoreMeter score={report.sensationalismScore} label="Sensationalism score" />
                 <p className="mt-3 text-xs leading-5 text-sift-muted">
-                  Counts loaded words, urgency cues, capitalization, and
-                  punctuation.
+                  Based on flagged wording, capitalization, and punctuation.
                 </p>
               </div>
 
               {/* Card 3: Headline Attribution */}
               <div className="rounded-2xl border border-sift-rule bg-sift-paper-2 p-4 sm:p-5">
                 <div className="flex items-center justify-between gap-3 text-sm font-semibold text-sift-muted">
-                  <span>Headline attribution</span>
+                  <span>Source attribution</span>
                   <ShieldAlert size={16} className="shrink-0 text-sift-accent" />
                 </div>
                 <div className="mt-4 min-h-11 text-lg font-semibold leading-6 text-sift-ink">
                   {report.attribution.identifiedSources.length > 0
                     ? report.attribution.identifiedSources.join(", ")
                     : report.attribution.status === "Vague / Weasel Words"
-                      ? "Vague attribution"
+                      ? "Vague source"
                       : report.attribution.status === "Anonymous Sources"
-                        ? "Anonymous attribution"
-                        : "No source in headline"}
+                        ? "Anonymous source"
+                        : "No source named"}
                 </div>
                 <p className="mt-3 text-xs leading-5 text-sift-muted">
-                  Shows names detected in the headline, not the publishers
-                  consulted below. Naming a source does not verify a claim.
+                  {report.attribution.detail}
                 </p>
               </div>
             </div>

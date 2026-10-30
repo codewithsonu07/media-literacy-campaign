@@ -2,6 +2,9 @@
 
 Sift It is a student media-literacy campaign with an interactive SIFT guide, case studies, a headline research tool, and the Campus Claim Radar.
 
+See [TECHNOLOGY.md](./TECHNOLOGY.md) for the application technology stack.
+See [PROJECT-REPORT.md](./PROJECT-REPORT.md) for the detailed project report.
+
 ## Campus Claim Radar
 
 Students can anonymously suggest a claim or headline they encountered. Reports are private until a moderator reviews them. Only reviewed learning cards appear at `/radar`; a submission never triggers AI research or becomes public automatically.
